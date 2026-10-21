@@ -1,0 +1,29 @@
+{
+    "name": "deyoni/device",
+    "version": "1.0.0",
+    "namespace": "DeyoniDevice",
+    "platforms": [
+        "android"
+    ],
+    "bridge_functions": [
+        {
+            "name": "DeyoniDevice.Appearance",
+            "android": "com.deyoni.plugins.device.DeyoniDeviceFunctions.Appearance"
+        },
+        {
+            "name": "DeyoniDevice.Documents",
+            "android": "com.deyoni.plugins.device.DeyoniDeviceFunctions.Documents"
+        }
+    ],
+    "android": {
+        "min_version": 26,
+        "init_function": "com.deyoni.plugins.device.registerDeyoni",
+        "permissions": []
+    },
+    "ios": { "min_version": "18.2" },
+    "events": [
+        "Deyoni\\Device\\Events\\DocumentResult"
+    ],
+    "service_provider": "Deyoni\\Device\\DeyoniDeviceServiceProvider",
+    "hooks": { "post_compile": "deyoni:prepare-android" }
+}
