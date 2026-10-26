@@ -19,7 +19,9 @@ class EntryForm extends FormScreen
 
     public string $creditorChoice = '';
 
-    public string $kindLabel = 'دين جديد';
+    public string $kindLabel = 'دين عليك';
+
+    public const OPERATIONS = ['دين عليك' => ['debt', 'payable'], 'سداد دفعته' => ['payment', 'payable'], 'مبلغ لك لدى الجهة' => ['debt', 'receivable'], 'سداد استلمته' => ['payment', 'receivable']];
 
     public string $amount = '';
 
@@ -46,7 +48,10 @@ class EntryForm extends FormScreen
         $this->requestId = (string) Str::uuid();
         $this->occurredAt = now()->format('Y-m-d');
         $this->currencyLabel = Currency::from(AppSetting::read('currency', 'YER'))->label();
-        $this->kindLabel = $this->data('kind', 'debt') === 'payment' ? 'سداد' : 'دين جديد';
+        $this->kindLabel = $this->data('kind', 'debt') === 'payment' ? 'سداد دفعته' : 'دين عليك';
+        if ($this->data('direction') === 'receivable') {
+            $this->kindLabel = $this->data('kind') === 'payment' ? 'سداد استلمته' : 'مبلغ لك لدى الجهة';
+        }
         if ($id = $this->data('creditor_id')) {
             $c = Creditor::findOrFail($id);
             $this->creditorChoice = $c->id.' · '.$c->name;
@@ -55,7 +60,7 @@ class EntryForm extends FormScreen
         if ($this->entryId) {
             $e = LedgerEntry::with('creditor')->findOrFail($this->entryId);
             $this->creditorChoice = $e->creditor_id.' · '.$e->creditor->name;
-            $this->kindLabel = $e->kind->label();
+            $this->kindLabel = $e->operationLabel();
             $this->currencyLabel = $e->currency->label();
             $this->amount = Money::input($e->amount_minor, $e->currency);
             $this->occurredAt = $e->occurred_at->format('Y-m-d');
@@ -76,7 +81,7 @@ class EntryForm extends FormScreen
             return;
         }
         $this->attempt(function (): void {
-            $input = ['creditor_id' => (int) $this->creditorChoice, 'kind' => $this->kindLabel === 'سداد' ? 'payment' : 'debt',
+            $input = ['creditor_id' => (int) $this->creditorChoice, 'kind' => self::OPERATIONS[$this->kindLabel][0] ?? '', 'direction' => self::OPERATIONS[$this->kindLabel][1] ?? '',
                 'currency' => $this->currencyLabel === 'ريال سعودي' ? 'SAR' : 'YER', 'amount' => $this->amount,
                 'occurred_at' => $this->occurredAt, 'notes' => $this->notes, 'request_id' => $this->requestId];
             $valid = app(LedgerService::class)->validated($input);
@@ -85,13 +90,13 @@ class EntryForm extends FormScreen
             if ($this->entryId) {
                 $old = LedgerEntry::findOrFail($this->entryId);
                 if ($old->currency->value === $valid['currency']) {
-                    $balance -= $old->kind->value === 'debt' ? $old->amount_minor : -$old->amount_minor;
+                    $balance -= $old->signedAmount();
                 }
             }
-            $overpay = $valid['kind'] === 'payment' && $valid['amount_minor'] > max(0, $balance);
+            $overpay = $valid['kind'] === 'payment' && $valid['amount_minor'] > max(0, $valid['direction'] === 'receivable' ? -$balance : $balance);
             if ($this->entryId || $overpay) {
                 $this->confirmation = ($this->entryId ? 'سيُلغى أثر الحركة القديمة وتُحفظ حركة بديلة مع سبب التصحيح. ' : '').
-                    ($overpay ? 'المبلغ أكبر من الدين الحالي. سيتم الاحتفاظ بالفرق كرصيد لك لدى هذه الجهة.' : 'هل تؤكد التصحيح؟');
+                    ($overpay ? ($valid['direction'] === 'receivable' ? 'السداد المستلم أكبر من المبلغ الذي لك. سيصبح الفرق مبلغًا عليك للجهة.' : 'السداد المدفوع أكبر من المبلغ الذي عليك. سيصبح الفرق رصيدًا لك لدى الجهة.') : 'هل تؤكد التصحيح؟');
 
                 return;
             }

@@ -94,7 +94,7 @@ class Creditors extends NativeComponent
         if ($this->sort === 'الاسم') {
             $query->orderBy('name');
         } elseif ($this->sort === 'أعلى دين') {
-            $query->orderByRaw("(SELECT COALESCE(SUM(CASE WHEN kind = 'debt' THEN amount_minor ELSE -amount_minor END), 0) FROM ledger_entries WHERE creditor_id = creditors.id AND currency = ? AND voided_at IS NULL) DESC", [$code->value]);
+            $query->orderByRaw("(SELECT COALESCE(SUM(CASE WHEN (kind = 'debt' AND direction = 'payable') OR (kind = 'payment' AND direction = 'receivable') THEN amount_minor ELSE -amount_minor END), 0) FROM ledger_entries WHERE creditor_id = creditors.id AND currency = ? AND voided_at IS NULL) DESC", [$code->value]);
         } else {
             $query->orderByDesc('entries_max_occurred_at');
         }

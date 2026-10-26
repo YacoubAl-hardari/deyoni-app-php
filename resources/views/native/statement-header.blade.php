@@ -19,16 +19,18 @@ h2 { font-size: 14pt; margin: 5mm 0 2mm; }
     <h1>كشف حساب</h1>
     <div class="meta">تاريخ الإصدار: <span dir="ltr">{{ $issuedAt->format('Y/m/d H:i') }}</span></div>
     <h2>{{ $creditor->name }}</h2>
+    <div class="meta">الفترة: {{ $from ?: 'البداية' }} إلى {{ $to ?: 'آخر حركة' }}</div>
     @if($creditor->phone)<div class="meta">الهاتف: <span dir="ltr">{{ $creditor->phone }}</span></div>@endif
     @if($creditor->notes)<div class="meta">{{ $creditor->notes }}</div>@endif
     @if($creditor->archived_at)<div class="meta">جهة مؤرشفة</div>@endif
     <table class="summary" dir="rtl">
-        <thead><tr><th>العملة</th><th>إجمالي الديون</th><th>إجمالي السداد</th><th>الرصيد الحالي</th></tr></thead>
+        <thead><tr><th>العملة</th><th>الرصيد الافتتاحي</th><th>ديون الفترة (لك وعليك)</th><th>سداد الفترة (دفع واستلام)</th><th>الرصيد الختامي</th></tr></thead>
         <tbody>
         @foreach(Currency::cases() as $currency)
             @php($total = $totals[$currency->value])
             <tr>
                 <td>{{ $currency->label() }}</td>
+                <td>{{ $total['opening'] > 0 ? 'عليك' : ($total['opening'] < 0 ? 'لك' : 'مسدد') }}<br>{{ Money::format($total['opening'], $currency) }}</td>
                 <td>{{ Money::format($total['debts'], $currency) }}</td>
                 <td>{{ Money::format($total['payments'], $currency) }}</td>
                 <td>{{ $total['balance'] > 0 ? 'عليك' : ($total['balance'] < 0 ? 'لك' : 'مسدد') }}<br>{{ Money::format($total['balance'], $currency) }}</td>

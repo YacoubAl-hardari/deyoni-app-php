@@ -12,7 +12,7 @@
             @endif
             <native:select label="الجهة" :options="$entryId ? [$creditorChoice] : $choices" native:model="creditorChoice" :disabled="(bool) $entryId" class="w-full" />
             @include('native.partials.field-error', ['field' => 'creditor_id'])
-            <native:select label="نوع العملية" :options="['دين جديد','سداد']" native:model="kindLabel" :disabled="$cancelledEntry" class="w-full" />
+            <native:select label="نوع العملية" :options="array_keys(\App\NativeComponents\EntryForm::OPERATIONS)" native:model="kindLabel" :disabled="$cancelledEntry" class="w-full" />
             <native:outlined-text-input placeholder="المبلغ" native:model="amount" keyboard="decimal" :disabled="$cancelledEntry" class="w-full" />
             @include('native.partials.field-error', ['field' => 'amount'])
             <native:select label="العملة" :options="['ريال يمني','ريال سعودي']" native:model="currencyLabel" :disabled="$cancelledEntry" class="w-full" />

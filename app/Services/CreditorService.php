@@ -12,7 +12,7 @@ class CreditorService
         $input['name'] = trim($input['name'] ?? '');
         $data = Validator::make($input, [
             'name' => 'required|string|max:120', 'phone' => 'nullable|string|max:40',
-            'notes' => 'nullable|string|max:2000', 'icon' => 'required|in:store,home,directions_car,directions_bus,person,category',
+            'notes' => 'nullable|string|max:2000', 'icon' => 'required|in:store,home,directions_car,directions_bus,person,bolt,shopping_cart,airport_shuttle,category',
         ], ['name.required' => 'أدخل اسم الجهة.', 'name.max' => 'اسم الجهة طويل جدًا.'])->validate();
         $creditor ??= new Creditor;
         $creditor->fill($data)->save();

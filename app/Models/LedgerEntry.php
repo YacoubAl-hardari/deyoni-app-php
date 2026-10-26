@@ -10,6 +10,20 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class LedgerEntry extends Model
 {
+    public const BALANCE_SQL = "CASE WHEN (kind = 'debt' AND direction = 'payable') OR (kind = 'payment' AND direction = 'receivable') THEN amount_minor ELSE -amount_minor END";
+
+    public function signedAmount(): int
+    {
+        return ($this->kind === EntryKind::Debt) === ($this->direction === 'payable') ? $this->amount_minor : -$this->amount_minor;
+    }
+
+    public function operationLabel(): string
+    {
+        return $this->direction === 'receivable'
+            ? ($this->kind === EntryKind::Debt ? 'مبلغ لك لدى الجهة' : 'سداد استلمته')
+            : ($this->kind === EntryKind::Debt ? 'دين عليك' : 'سداد دفعته');
+    }
+
     protected $guarded = ['id'];
 
     protected function occurredAt(): Attribute

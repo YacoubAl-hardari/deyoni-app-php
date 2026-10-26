@@ -5,6 +5,7 @@ use App\NativeComponents\CreditorForm;
 use App\NativeComponents\Creditors;
 use App\NativeComponents\EntryForm;
 use App\NativeComponents\Home;
+use App\NativeComponents\PaymentPromises;
 use App\NativeComponents\Settings;
 use Illuminate\Support\Facades\Route;
 
@@ -16,3 +17,4 @@ Route::native('/creditors/{id}', CreditorDetails::class)->whereNumber('id');
 Route::native('/entries/create', EntryForm::class);
 Route::native('/entries/{id}/edit', EntryForm::class)->whereNumber('id');
 Route::native('/settings', Settings::class);
+Route::native('/payment-promises', PaymentPromises::class);

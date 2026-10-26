@@ -14,22 +14,25 @@ use Mpdf\Output\Destination;
 class AccountStatementService
 {
     /** @return array<string, array{debts: int, payments: int, balance: int}> */
-    public function totals(Creditor $creditor): array
+    public function totals(Creditor $creditor, string $from = '', string $to = ''): array
     {
         $result = [];
         foreach (Currency::cases() as $currency) {
-            $row = $creditor->entries()->whereNull('voided_at')->where('currency', $currency->value)
-                ->selectRaw("COALESCE(SUM(CASE WHEN kind = 'debt' THEN amount_minor ELSE 0 END), 0) AS debts, COALESCE(SUM(CASE WHEN kind = 'payment' THEN amount_minor ELSE 0 END), 0) AS payments")->first();
+            $row = PeriodFilter::apply($creditor->entries()->getQuery(), $from, $to)->whereNull('voided_at')->where('currency', $currency->value)
+                ->selectRaw("COALESCE(SUM(CASE WHEN kind = 'debt' THEN amount_minor ELSE 0 END), 0) AS debts, COALESCE(SUM(CASE WHEN kind = 'payment' THEN amount_minor ELSE 0 END), 0) AS payments, COALESCE(SUM(".LedgerEntry::BALANCE_SQL.'), 0) AS movement')->first();
             $debts = (int) $row->debts;
             $payments = (int) $row->payments;
-            $result[$currency->value] = ['debts' => $debts, 'payments' => $payments, 'balance' => $debts - $payments];
+            $opening = $from === '' ? 0 : (int) $creditor->entries()->whereNull('voided_at')->where('currency', $currency->value)->where('occurred_at', '<', $from)->selectRaw('COALESCE(SUM('.LedgerEntry::BALANCE_SQL.'), 0) AS balance')->value('balance');
+            $result[$currency->value] = ['debts' => $debts, 'payments' => $payments, 'opening' => $opening, 'balance' => $opening + (int) $row->movement];
         }
 
         return $result;
     }
 
-    public function create(Creditor $creditor): string
+    public function create(Creditor $creditor, string $from = '', string $to = ''): string
     {
+        PeriodFilter::dates($from, $to);
+        $totals = $this->totals($creditor, $from, $to);
         $directory = storage_path('app/private/statements');
         $temp = storage_path('app/private/pdf-cache');
         File::ensureDirectoryExists($directory);
@@ -52,17 +55,17 @@ class AccountStatementService
         $pdf->SetAuthor('ديوني');
         $pdf->SetHTMLFooter('<div dir="rtl" style="font-size:8px;color:#64748b;border-top:1px solid #dce4e8;padding-top:6px">ديوني · كشف حساب محلي <span style="float:left">صفحة {PAGENO} من {nbpg}</span></div>');
         $pdf->WriteHTML(view('native.statement-header', [
-            'creditor' => $creditor, 'totals' => $this->totals($creditor), 'issuedAt' => now(),
+            'creditor' => $creditor, 'totals' => $totals, 'issuedAt' => now(), 'from' => $from, 'to' => $to,
         ])->render());
-        $entries = LedgerEntry::where('creditor_id', $creditor->id)->orderBy('occurred_at')->orderBy('id');
-        $balances = ['YER' => 0, 'SAR' => 0];
+        $entries = PeriodFilter::apply(LedgerEntry::where('creditor_id', $creditor->id), $from, $to)->orderBy('occurred_at')->orderBy('id');
+        $balances = ['YER' => $totals['YER']['opening'], 'SAR' => $totals['SAR']['opening']];
         $hasEntries = false;
         foreach ($entries->cursor()->chunk(150) as $chunk) {
             $rows = [];
             foreach ($chunk as $entry) {
                 $hasEntries = true;
                 if (! $entry->voided_at) {
-                    $balances[$entry->currency->value] += $entry->kind->value === 'debt' ? $entry->amount_minor : -$entry->amount_minor;
+                    $balances[$entry->currency->value] += $entry->signedAmount();
                 }
                 $rows[] = ['entry' => $entry, 'balance' => $balances[$entry->currency->value]];
             }

@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\AuditEvent;
 use App\Models\Creditor;
 use App\Models\LedgerEntry;
+use App\Models\PaymentPromise;
 use App\Support\Enums\Currency;
 use App\Support\Money\Money;
 use Illuminate\Support\Facades\DB;
@@ -15,7 +16,9 @@ class LedgerService
 {
     public function validated(array $input): array
     {
+        $input['direction'] ??= 'payable';
         $data = Validator::make($input, [
+            'direction' => 'required|in:payable,receivable',
             'creditor_id' => 'required|integer|exists:creditors,id', 'kind' => 'required|in:debt,payment',
             'currency' => 'required|in:YER,SAR', 'amount' => 'required|string',
             'occurred_at' => 'required|date_format:Y-m-d', 'notes' => 'nullable|string|max:2000',
@@ -65,6 +68,10 @@ class LedgerService
             $before = $old->toArray();
             $old->update(['voided_at' => now()]);
             $new = LedgerEntry::create([...$data, 'replaces_entry_id' => $old->id]);
+            $sameSettlement = $new->kind->value === 'payment' && $new->direction === $old->direction && $new->currency === $old->currency && $new->amount_minor === $old->amount_minor;
+            PaymentPromise::where('ledger_entry_id', $old->id)->update($sameSettlement
+                ? ['ledger_entry_id' => $new->id]
+                : ['status' => 'pending', 'ledger_entry_id' => null]);
             $this->audit($old, 'corrected', $before, $new->toArray(), $reason);
 
             return $new;
@@ -81,13 +88,14 @@ class LedgerService
             }
             $before = $entry->toArray();
             $entry->update(['voided_at' => now()]);
+            PaymentPromise::where('ledger_entry_id', $entry->id)->update(['status' => 'pending', 'ledger_entry_id' => null]);
             $this->audit($entry, 'voided', $before, $entry->toArray(), $reason);
         }, 3);
     }
 
     private function assertSameRequest(LedgerEntry $entry, array $data): void
     {
-        foreach (['creditor_id', 'kind', 'currency', 'amount_minor', 'occurred_at', 'notes'] as $key) {
+        foreach (['creditor_id', 'kind', 'direction', 'currency', 'amount_minor', 'occurred_at', 'notes'] as $key) {
             $actual = $key === 'occurred_at' ? $entry->occurred_at->format('Y-m-d') : $entry->getRawOriginal($key);
             if ((string) $actual !== (string) ($data[$key] ?? null)) {
                 throw ValidationException::withMessages(['entry' => 'معرّف الحفظ مستخدم لعملية مختلفة.']);

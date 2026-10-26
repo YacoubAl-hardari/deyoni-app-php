@@ -36,7 +36,7 @@ class CreditorForm extends FormScreen
 
     public static function icons(): array
     {
-        return ['متجر' => 'store', 'منزل' => 'home', 'سيارة' => 'directions_car', 'حافلة' => 'directions_bus', 'شخص' => 'person', 'أخرى' => 'category'];
+        return ['متجر' => 'store', 'منزل' => 'home', 'سيارة' => 'directions_car', 'حافلة' => 'directions_bus', 'شخص' => 'person', 'كهرباء' => 'bolt', 'سوبر ماركت' => 'shopping_cart', 'باص' => 'airport_shuttle', 'أخرى' => 'category'];
     }
 
     protected function draft(): array

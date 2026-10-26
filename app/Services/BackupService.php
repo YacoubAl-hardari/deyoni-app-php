@@ -23,6 +23,7 @@ class BackupService
             'ledger_entries' => DB::table('ledger_entries')->orderBy('id')->get()->map(fn ($r) => (array) $r)->all(),
             'audit_events' => DB::table('audit_events')->orderBy('id')->get()->map(fn ($r) => (array) $r)->all(),
             'app_settings' => DB::table('app_settings')->get()->map(fn ($r) => (array) $r)->all(),
+            'payment_promises' => DB::table('payment_promises')->orderBy('id')->get()->map(fn ($r) => (array) $r)->all(),
         ]);
         $salt = random_bytes(16);
         $iv = random_bytes(12);
@@ -95,13 +96,14 @@ class BackupService
             $this->invalid();
         }
         DB::transaction(function () use ($data): void {
+            DB::table('payment_promises')->delete();
             DB::table('audit_events')->delete();
             DB::statement('UPDATE ledger_entries SET replaces_entry_id = NULL');
             DB::table('ledger_entries')->delete();
             DB::table('creditors')->delete();
             DB::table('app_settings')->delete();
-            foreach (['creditors', 'ledger_entries', 'audit_events', 'app_settings'] as $table) {
-                foreach ($data[$table] as $row) {
+            foreach (['creditors', 'ledger_entries', 'audit_events', 'app_settings', 'payment_promises'] as $table) {
+                foreach ($data[$table] ?? [] as $row) {
                     DB::table($table)->insert($row);
                 }
             }
@@ -124,10 +126,11 @@ class BackupService
             'creditors.*.id' => 'required|integer|min:1|distinct',
             'creditors.*.name' => 'required|string|max:120',
             'creditors.*.phone' => 'nullable|string|max:40',
-            'creditors.*.icon' => 'required|in:store,home,directions_car,directions_bus,person,category',
+            'creditors.*.icon' => 'required|in:store,home,directions_car,directions_bus,person,bolt,shopping_cart,airport_shuttle,category',
             'creditors.*.notes' => 'nullable|string|max:2000',
             'creditors.*.archived_at' => 'nullable|date',
-            'ledger_entries.*' => 'array:id,creditor_id,kind,amount_minor,currency,occurred_at,notes,request_id,replaces_entry_id,voided_at,created_at,updated_at',
+            'ledger_entries.*' => 'array:id,creditor_id,kind,direction,amount_minor,currency,occurred_at,notes,request_id,replaces_entry_id,voided_at,created_at,updated_at',
+            'ledger_entries.*.direction' => 'sometimes|required|in:payable,receivable',
             'ledger_entries.*.id' => 'required|integer|min:1|distinct',
             'ledger_entries.*.creditor_id' => 'required|integer|min:1',
             'ledger_entries.*.kind' => 'required|in:debt,payment',
@@ -150,9 +153,30 @@ class BackupService
             'app_settings.*' => 'array:key,value',
             'app_settings.*.key' => 'required|in:appearance,currency|distinct',
             'app_settings.*.value' => 'required|string',
+            'payment_promises' => 'sometimes|array|max:100000',
+            'payment_promises.*' => 'array:id,creditor_id,direction,currency,amount_minor,due_at,notes,status,ledger_entry_id,created_at,updated_at',
+            'payment_promises.*.id' => 'required|integer|min:1|distinct',
+            'payment_promises.*.creditor_id' => 'required|integer|min:1',
+            'payment_promises.*.direction' => 'required|in:payable,receivable',
+            'payment_promises.*.currency' => 'required|in:YER,SAR',
+            'payment_promises.*.amount_minor' => 'required|integer|min:1|max:1000000000000',
+            'payment_promises.*.due_at' => 'required|date_format:Y-m-d',
+            'payment_promises.*.notes' => 'nullable|string|max:2000',
+            'payment_promises.*.status' => 'required|in:pending,fulfilled,cancelled',
+            'payment_promises.*.ledger_entry_id' => 'nullable|integer|min:1|distinct',
+            'payment_promises.*.created_at' => 'nullable|date',
+            'payment_promises.*.updated_at' => 'nullable|date',
         ])->validate();
         $creditors = array_column($data['creditors'], null, 'id');
         $entries = array_column($data['ledger_entries'], null, 'id');
+        foreach ($data['payment_promises'] ?? [] as $promise) {
+            $entry = $entries[$promise['ledger_entry_id'] ?? 0] ?? null;
+            if (! isset($creditors[$promise['creditor_id']]) || ! is_int($promise['amount_minor']) ||
+                ($promise['status'] === 'fulfilled' && (! $entry || $entry['voided_at'] || $entry['kind'] !== 'payment' || $entry['creditor_id'] !== $promise['creditor_id'] || ($entry['direction'] ?? 'payable') !== $promise['direction'] || $entry['currency'] !== $promise['currency'] || $entry['amount_minor'] !== $promise['amount_minor'])) ||
+                ($promise['status'] !== 'fulfilled' && ! empty($promise['ledger_entry_id']))) {
+                $this->invalid();
+            }
+        }
         $replaced = [];
         foreach ($data['ledger_entries'] as $entry) {
             if (! is_int($entry['amount_minor']) || ! isset($creditors[$entry['creditor_id']])) {

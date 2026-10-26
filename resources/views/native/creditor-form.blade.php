@@ -12,7 +12,8 @@
             @endif
             <native:outlined-text-input placeholder="رقم الهاتف (اختياري)" native:model="phone" keyboard="phone" class="w-full" />
             @include('native.partials.field-error', ['field' => 'phone'])
-            <native:select label="أيقونة الجهة" :options="array_keys(\App\NativeComponents\CreditorForm::icons())" native:model="iconLabel" class="w-full" />
+            <native:select label="نوع الجهة" :options="array_keys(\App\NativeComponents\CreditorForm::icons())" native:model="iconLabel" class="w-full" />
+            @include('native.partials.field-error', ['field' => 'icon'])
             <native:outlined-text-input placeholder="ملاحظة (اختياري)" native:model="notes" class="w-full" />
             @include('native.partials.field-error', ['field' => 'notes'])
             @include('native.partials.field-error', ['field' => 'database'])
